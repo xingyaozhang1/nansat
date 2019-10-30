@@ -9,6 +9,4 @@ COPY setup.py /tmp/
 WORKDIR /tmp
 RUN python setup.py install
 
-RUN pip install coverage
-
 WORKDIR /src
