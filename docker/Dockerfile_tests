@@ -1,0 +1,14 @@
+FROM aperrin66/nansat-base
+
+RUN apt update && \
+    apt install -y --no-install-recommends \
+    g++ \
+    git && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+    coverage==5.0 \
+    coveralls==1.10.0
+
+WORKDIR /src
