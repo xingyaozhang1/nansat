@@ -3,12 +3,30 @@ language: python
 services:
   - docker
 
+before_install:
+  - '[[ -z "$DOCKER_TAG" ]] && export DOCKER_TAG="$(echo $TRAVIS_COMMIT | cut -c-7)"'
+  - docker pull ${DOCKER_USER}/nansat-builder || true
+  - docker pull ${DOCKER_USER}/nansat-base || true
+  - docker pull ${DOCKER_USER}/nansat-tests || true
+  - docker pull ${DOCKER_USER}/nansat || true
+  - docker pull ${DOCKER_USER}/nansat-dev || true
+
 install:
-  - docker build . -t nansat -f docker/Dockerfile_nansat
-  - pip install coveralls
+  - docker build --pull . -f docker/Dockerfile_base --cache-from ${DOCKER_USER}/nansat-builder --target builder -t ${DOCKER_USER}/nansat-builder:${DOCKER_TAG}
+  - docker build --pull . -f docker/Dockerfile_base --cache-from ${DOCKER_USER}/nansat-builder --cache-from ${DOCKER_USER}/nansat-base -t ${DOCKER_USER}/nansat-base:${DOCKER_TAG}
+  - docker build . -f docker/Dockerfile_tests --cache-from ${DOCKER_USER}/nansat-base --cache-from ${DOCKER_USER}/nansat-tests -t ${DOCKER_USER}/nansat-tests:${DOCKER_TAG}
+  - docker build . -f docker/Dockerfile_nansat --cache-from ${DOCKER_USER}/nansat-base --cache-from ${DOCKER_USER}/nansat -t ${DOCKER_USER}/nansat:${DOCKER_TAG}
+  - docker build . -f docker/Dockerfile_dev --cache-from ${DOCKER_USER}/nansat -t ${DOCKER_USER}/nansat-dev:${DOCKER_TAG}
 
 script:
-  - docker run --rm -it -v `pwd`:/src nansat coverage run --omit=nansat/mappers/*,nansat/tests/*,nansat/nansatmap.py --source=nansat setup.py test
+  - docker run -e "COVERALLS_REPO_TOKEN=$COVERALLS_REPO_TOKEN" -e "TRAVIS=true" -e TRAVIS_JOB_ID="$TRAVIS_JOB_ID" -e TRAVIS_BRANCH="$TRAVIS_BRANCH" -e TRAVIS_PULL_REQUEST="$TRAVIS_PULL_REQUEST" --rm -v "$(pwd):/src" ${DOCKER_USER}/nansat-tests:${DOCKER_TAG} /bin/bash -c "coverage run --omit=nansat/mappers/*,nansat/tests/*,nansat/nansatmap.py --source=nansat setup.py test && coveralls"
 
-after_success:
-  - coveralls
+before_deploy:
+  - docker login -u "${DOCKER_USER}" -p "${DOCKER_PASS}"
+
+deploy:
+  provider: script
+  skip_cleanup: True
+  on:
+    branch: slim-image-poc
+  script: /bin/bash scripts/docker_push.sh nansat-builder nansat-base nansat-tests nansat nansat-dev
